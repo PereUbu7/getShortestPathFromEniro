@@ -6,6 +6,9 @@ import re
 import time
 from aco import ACO, Graph
 
+EPSILON = 1e-2
+ETERNITY = 1e6
+
 eniro = "https://kartor.eniro.se/?&mode=route"
 
 adresses = []
@@ -33,7 +36,7 @@ with closing(Firefox()) as browser:
         for m in range(len(adresses)):
 
             if n == m:
-                duration[-1].append( 0 )
+                duration[-1].append( EPSILON )
                 continue
 
             WebDriverWait(browser, timeout=10).until(
@@ -66,11 +69,13 @@ with closing(Firefox()) as browser:
             result = re.split(prog, durationString)
 
             if len(result) == 2:
-                duration[-1].append( int(result[0]) )
+                duration[-1].append( int(result[0]) + EPSILON )
             elif len(result) == 3:
-                duration[-1].append( int(result[0])*60 + int(result[1]) )
+                duration[-1].append( int(result[0])*60 + int(result[1]) + EPSILON )
+            else:
+                duration[-1].append( ETERNITY )
 
-            print("Duration:", duration[-1][-1], "minutes from", adresses[n], "to", adresses[m])
+            print("Duration:", int(duration[-1][-1]), "minutes from", adresses[n], "to", adresses[m])
 
 
     # Find shortest path with AntColonyOptimizer
@@ -78,7 +83,7 @@ with closing(Firefox()) as browser:
     graph = Graph(duration, len(adresses))
     path, cost = aco.solve(graph)
 
-    print('\nTotal duration: {}, path: {}'.format(cost, path))
+    print('\nTotal duration: {}, path: {}'.format(int(cost), path))
 
     print("\nPath:")
     for n in path:
