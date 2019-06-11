@@ -1,7 +1,7 @@
 from contextlib import closing
-from selenium.webdriver import Firefox # pip install selenium
+from selenium.webdriver import Firefox
 from selenium.webdriver.support.ui import WebDriverWait
-#from selenium.webdriver.common.by import By
+
 import re
 import time
 import pickle
@@ -16,14 +16,15 @@ def unpickle_iter(file):
 
 EPSILON = 1e-2
 ETERNITY = 1e6
+NUMBER_OF_OPTIMIZING_TRIES = 100
 
 eniro = "https://kartor.eniro.se/?&mode=route"
 
 adresses = []
 
-file = open("adresses.txt", "r")
+file = open("adresses.txt", mode="r", encoding="utf-8")
 
-print("Checking up:")
+print("\nChecking up:")
 
 # Get adresses from file
 for line in file.readlines():
@@ -31,19 +32,7 @@ for line in file.readlines():
     print(line.rstrip())
     
 # Get cached distances from file cache
-#distCache = {}
-#try:
-    #file = open( "dist.cache", "rb")
-    #for key in unpickle_iter(file):
-        #for k in key:
-            #if k not in distCache:
-                #distCache = {**distCache, **key}
-            #else:
-                #distCache[k] = {**distCache[k], **key[k]}
-    #file.close()
-#except FileNotFoundError:
-    #pass
-print("Loading cache")
+print("\nLoading cache")
 distCache = pickle.load( open("distDict.cache", "rb"))
 
 print(distCache)
@@ -53,7 +42,7 @@ prog = re.compile("\s[a-z]{3}", flags=re.IGNORECASE)
 
 sleeptime = 2
 
-print("Opening web browser")
+print("\nOpening web browser")
 # use firefox to get page with javascript generated content
 with closing(Firefox()) as browser:
     browser.get(eniro)
@@ -68,17 +57,14 @@ with closing(Firefox()) as browser:
                 continue
             # Check if adress combination already in cache
             elif adresses[n] in distCache:
-                #print(adresses[n], "in first dict")
                 if adresses[m] in distCache[adresses[n]]:
-                    #print(adresses[m], "in second dict. Adding distance", distCache[ adresses[n] ][ adresses[m] ])
                     duration[-1].append( distCache[ adresses[n] ][ adresses[m] ] )
                     continue
                 else:
                     pass
-                    #print(adresses[m], "NOT in second dict")
             else:
                 pass
-                #print(adresses[n], "NOT in first dict")
+
             WebDriverWait(browser, timeout=20).until(
                 lambda x: x.find_element_by_name("from"))
             form_from = browser.find_element_by_name("from")
@@ -91,11 +77,14 @@ with closing(Firefox()) as browser:
             form_to.clear()
             form_to.send_keys(adresses[m] + "\n")
 
-            WebDriverWait(browser, timeout=20).until(
-                lambda x: x.find_element_by_class_name("e-do-route"))
-            button = browser.find_element_by_class_name("e-do-route")
+            # Press TAB
+            form_to.send_keys(u'\ue004')
 
-            button.click()
+            # WebDriverWait(browser, timeout=20).until(
+            #     lambda x: x.find_element_by_class_name("e-do-route"))
+            # button = browser.find_element_by_class_name("e-do-route")
+            #
+            # button.click()
 
             time.sleep(sleeptime)
 
@@ -121,28 +110,34 @@ with closing(Firefox()) as browser:
                 distCache[adresses[n]][adresses[m]] = duration[-1][-1]
             else:
                 distCache[adresses[n]] = {adresses[m] : duration[-1][-1]}
+
+            pickle.dump(distCache, open("distDict.cache", "wb"))
     
-    # For testing !!!
-    #print(distCache)
-    print("Saving cache")
-    pickle.dump(distCache, open("distDict.cache", "wb"))
-    
-    # Cache findings
+    # Print cache
     for i in range(len(adresses)):
         for j in range(len(adresses)):
             print({ adresses[i] : { adresses[j] : duration[i][j] } })
-            #pickle.dump({ adresses[i] : { adresses[j] : duration[i][j] } }, open( "dist.cache", "ab" ))
 
-    print("Optimizing path")
-    # Find shortest path with AntColonyOptimizer
-    aco = ACO(ant_count=10, generations=100, alpha=1.0, beta=10.0, rho=0.5, q=10, strategy=2, loop=True)
-    graph = Graph(duration, len(adresses))
-    path, cost = aco.solve(graph)
+    # Find optimal path
+    minCost = None
+    minPath = None
 
-    print('\nTotal duration: {}, path: {}'.format(int(cost), path))
+    for i in range(NUMBER_OF_OPTIMIZING_TRIES):
+        print("Optimizing path", i+1, "of", NUMBER_OF_OPTIMIZING_TRIES)
+        # Find shortest path with AntColonyOptimizer
+        aco = ACO(ant_count=10, generations=100, alpha=1.0, beta=10.0, rho=0.5, q=10, strategy=2, loop=True)
+        graph = Graph(duration, len(adresses))
+        path, cost = aco.solve(graph)
 
+        if(minCost is None or cost < minCost):
+            minCost = cost
+            minPath = path
+
+            print('Total duration: {}, path: {}\n'.format(int(minCost), minPath))
+
+    # Print path
     print("\nPath:")
-    for n in path:
+    for n in minPath:
         print(adresses[n])
 
     # Display shortest path in eniro
@@ -172,7 +167,7 @@ with closing(Firefox()) as browser:
     n = 1
     for via in forms_via:
         via.clear()
-        via.send_keys(adresses[n] + "\n")
+        via.send_keys(adresses[minPath[n]] + "\n")
         n+=1
 
     WebDriverWait(browser, timeout=10).until(
@@ -183,7 +178,7 @@ with closing(Firefox()) as browser:
 
     # Wait untill browser is closed
     try:
-        print("Close browser to close script")
+        print("\nClose browser to close script")
         while True:
             browser.find_element_by_class_name("e-do-route")
             time.sleep(1)
