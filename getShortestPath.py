@@ -18,7 +18,7 @@ def unpickle_iter(file):
 
 EPSILON = 1e-2
 ETERNITY = 1e6
-NUMBER_OF_OPTIMIZING_TRIES = 1
+NUMBER_OF_OPTIMIZING_TRIES = 100
 
 eniro = "https://kartor.eniro.se/?&mode=route"
 
@@ -35,7 +35,11 @@ for line in file.readlines():
     
 # Get cached distances from file cache
 print("\nLoading cache")
-distCache = pickle.load( open("distDict.cache", "rb"))
+distCache = {}
+try:
+	distCache = pickle.load( open("distDict.cache", "rb"))
+except:
+	print("No cache file distDict.cache found")
 
 print(distCache)
 
